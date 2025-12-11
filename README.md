@@ -109,7 +109,16 @@ We formally tested whether Blue side has a statistically significant advantage o
 
 **Test Statistic:** Difference in win rates (Blue win rate - Red win rate)
 
+**Why this test statistic?** The difference in win rates directly measures the quantity we care about - whether Blue side wins more often. It's intuitive, interpretable, and captures the essence of our research question.
+
 **Significance Level:** α = 0.05
+
+**Why α = 0.05?** This is the conventional threshold in statistical analysis, balancing the risk of false positives (claiming an advantage exists when it doesn't) against false negatives (missing a real advantage). For a competitive gaming context, this threshold is appropriate since the consequences of either error are not severe.
+
+**Why a permutation test?** We chose a permutation test over a parametric test (like a z-test for proportions) because:
+1. It makes no assumptions about the underlying distribution of win rates
+2. It directly simulates the null hypothesis by randomly shuffling side labels
+3. It's robust and intuitive - if side truly doesn't matter, shuffling labels shouldn't change the observed difference
 
 **Results:**
 - Blue side win rate: 51.5%
@@ -119,7 +128,7 @@ We formally tested whether Blue side has a statistically significant advantage o
 
 <iframe src="assets/hypothesis_test.html" width="800" height="600" frameborder="0"></iframe>
 
-**Conclusion:** Since the p-value (≈0) is less than our significance level (0.05), we **reject the null hypothesis**. There is statistically significant evidence that Blue side has a higher win rate than Red side in professional League of Legends.
+**Conclusion:** Since the p-value (≈0) is less than our significance level (0.05), we **reject the null hypothesis**. There is statistically significant evidence that Blue side has a higher win rate than Red side in professional League of Legends. This suggests that the first-pick advantage in the draft phase translates to a measurable competitive edge.
 
 ---
 
@@ -161,32 +170,56 @@ Our baseline model is a **Logistic Regression classifier** that predicts game ou
 
 ## Final Model
 
-We improved upon our baseline by:
+We improved upon our baseline by adding more features, engineering new features based on domain knowledge, and tuning hyperparameters.
 
-1. **Adding more features:** All 5 picks (`pick1`-`pick5`) and all 5 bans (`ban1`-`ban5`)
-2. **Engineering new features:**
-   - `num_meta_picks`: Count of how many of the team's picks are "meta" champions (top 20 most picked)
-   - `num_meta_bans`: Count of how many of the team's bans target "meta" champions (top 20 most banned)
-3. **Hyperparameter tuning:** Using GridSearchCV to find optimal regularization strength (C)
+### Features Added
 
-**Model Selected:** Logistic Regression (outperformed Random Forest with less overfitting)
+**All Picks (`pick1`-`pick5`):** The baseline only used the first pick, but a team's strength comes from their entire composition. Different champions synergize with each other - for example, a team with strong engage champions needs follow-up damage dealers. By including all five picks, the model can learn which champion combinations tend to win more often.
 
-**Features:**
-- `side` (1 nominal) - One-hot encoded
-- `pick1`-`pick5` (5 nominal) - One-hot encoded
-- `ban1`-`ban5` (5 nominal) - One-hot encoded
-- `num_meta_picks` (1 quantitative, engineered)
-- `num_meta_bans` (1 quantitative, engineered)
+**All Bans (`ban1`-`ban5`):** Bans reveal strategic information about what teams fear playing against. If a team bans five assassins, it suggests their composition may be vulnerable to burst damage. Including ban information allows the model to capture these strategic considerations that exist before the game even starts.
+
+### Engineered Features
+
+**`num_meta_picks` (count of top-20 most picked champions on the team):** 
+From the perspective of the data generating process, "meta" champions are heavily picked because professional analysts and coaches have identified them as strong in the current patch. Teams that draft more meta champions are leveraging collective professional knowledge about what's effective. A team with 4-5 meta picks is playing "standard" while a team with 0-1 meta picks is likely running an unconventional strategy that may be riskier.
+
+**`num_meta_bans` (count of top-20 most banned champions in the team's bans):**
+Similarly, the most banned champions are those the professional community considers most threatening or overpowered. Teams that ban meta champions are engaging in standard strategic play, while teams that use bans on non-meta champions may be target-banning specific players or hiding their own strategy. This feature captures how conventionally a team is approaching the draft.
+
+### Modeling Algorithm
+
+We tested both **Random Forest** and **Logistic Regression** with the same features:
+
+| Model | Training Accuracy | Test Accuracy |
+|-------|------------------|---------------|
+| Random Forest | 65.79% | 53.82% |
+| Logistic Regression | 59.02% | 54.43% |
+
+We selected **Logistic Regression** as our final model because:
+1. It achieved higher test accuracy (54.43% vs 53.82%)
+2. It showed less overfitting - the gap between training and test accuracy was smaller (4.6% vs 12%)
+3. The relationship between draft features and winning appears to be relatively linear, so a simpler model generalizes better
+
+### Hyperparameter Tuning
+
+We used **GridSearchCV with 5-fold cross-validation** to tune hyperparameters, testing:
+- `C` (regularization strength): [0.01, 0.1, 1, 10]
+- `penalty`: ['l2']
 
 **Best Hyperparameters:** C=1, penalty='l2'
 
-**Performance:**
-- Training Accuracy: 59.02%
-- Test Accuracy: 54.43%
+The regularization strength C=1 provides moderate regularization, preventing the model from overfitting to noise in the high-dimensional one-hot encoded champion features while still allowing it to learn meaningful patterns.
 
-**Improvement over Baseline:** The Final Model achieves 54.43% test accuracy compared to the baseline's 51.86%, an improvement of 2.57 percentage points (4.96% relative improvement).
+### Performance Improvement
 
-The modest improvement suggests that predicting game outcomes from draft alone is inherently difficult - team skill, in-game execution, and coordination likely matter more than champion selection. Nevertheless, our model demonstrates that draft information does contain predictive signal about game outcomes.
+| Metric | Baseline | Final Model | Improvement |
+|--------|----------|-------------|-------------|
+| Test Accuracy | 51.86% | 54.43% | +2.57 percentage points |
+| Training Accuracy | 54.32% | 59.02% | +4.70 percentage points |
+
+The Final Model achieves 54.43% test accuracy compared to the baseline's 51.86%, an improvement of 2.57 percentage points (4.96% relative improvement).
+
+**Why the improvement is modest:** Predicting game outcomes from draft alone is inherently difficult. While draft matters, professional League of Legends outcomes are heavily influenced by factors not captured in draft data: individual player skill, team coordination, in-game decision making, and day-to-day performance variance. The fact that we can predict better than random chance (50%) demonstrates that draft information does contain signal, but the ceiling is likely limited. Our model successfully extracts what predictive value exists in draft data.
 
 ---
 
